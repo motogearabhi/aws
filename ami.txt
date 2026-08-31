@@ -1,0 +1,14 @@
+A Golden AMI is essentially a standardized, hardened, and pre-approved Amazon Machine Image that an organization creates and maintains as the "gold standard" for launching EC2 instances.
+
+🔹 What makes it "Golden"
+Baseline OS:
+It starts with a clean, trusted operating system image (like Amazon Linux, Ubuntu, or Windows Server).
+
+Security Hardening:
+The image is patched with the latest updates, configured according to security best practices, and often scanned for vulnerabilities.
+
+Pre-installed Software:
+Common tools, agents, or middleware that every server in the organization needs (e.g., monitoring agents, logging tools, antivirus, configuration management clients).
+
+Compliance & Governance:
+The image is reviewed and approved to meet organizational or regulatory requirements, ensuring consistency across deployments.
