@@ -1,0 +1,762 @@
+AMI Maintenance and Lifecycle Management
+
+The overall lifecycle you want to establish is:
+
+                  Current Golden AMI
+                         │
+                         ▼
+                 Patch / Update
+                         │
+                         ▼
+                 Build New Version
+                         │
+                         ▼
+                    Test / QA
+                         │
+                ┌────────┴────────┐
+                │                 │
+              PASS              FAIL
+                │                 │
+                ▼                 ▼
+            Approve          Fix / Rebuild
+                │
+                ▼
+          Release New AMI
+                │
+                ▼
+       Distribute to Regions
+                │
+                ▼
+       Deprecate Previous AMI
+                │
+                ▼
+       Retain for defined period
+                │
+                ▼
+              Delete
+
+AWS has specific capabilities that support much of this lifecycle: EC2 Image Builder, Systems Manager Patch Manager, EC2 AMI deprecation, and Image Builder lifecycle policies.
+
+1. Recommended patching frequency
+
+This question is asking:
+
+How often should we create a new version of our Golden AMI?
+
+This is not necessarily the same as asking:
+
+"How often should production EC2 instances be patched?"
+
+Those are two related but different processes.
+
+Example
+
+You could have:
+
+Golden AMI
+     │
+     ├── August 2026
+     │      └── v1.0.0
+     │
+     ├── September 2026
+     │      └── v1.0.1
+     │
+     ├── October 2026
+     │      └── v1.0.2
+     │
+     └── Critical CVE
+            └── v1.0.3
+What should you research?
+
+You need to determine whether your organization wants:
+
+Option A — Monthly
+
+Every month
+     ↓
+Apply approved patches
+     ↓
+Build new Golden AMI
+     ↓
+Test
+     ↓
+Release
+
+This is usually a sensible baseline for OS/security maintenance.
+
+Option B — Event-driven
+
+Build a new AMI whenever there is:
+
+Critical CVE
+Zero-day vulnerability
+Critical OS patch
+Important agent update
+Major security configuration change
+
+Option C — Monthly + emergency
+
+This is the model I would investigate first:
+
+Scheduled monthly Golden AMI release + expedited rebuild for critical security vulnerabilities.
+
+Don't put this into the final company standard until you've confirmed your organization's patch policy.
+
+AWS Systems Manager Patch Manager supports scheduled patching and specifically supports patch policies across accounts and Regions. AWS currently recommends Patch Manager policies through Quick Setup for configuring patching operations.
+
+AWS documentation
+
+AWS Systems Manager Patch Manager
+
+AWS Patch Manager — Patching noncompliant nodes
+
+2. Patch validation methodology
+
+This is different from simply saying:
+
+"Install the patches."
+
+You need to answer:
+
+How do we prove that the patches were successfully applied and didn't break the image?
+
+A good process would be:
+
+Identify approved patches
+          ↓
+Build new AMI
+          ↓
+Install patches
+          ↓
+Verify installed patches
+          ↓
+Run security scan
+          ↓
+Run functional tests
+          ↓
+Run application/agent tests
+          ↓
+Generate validation results
+          ↓
+Approve / Reject
+What should be validated?
+OS patch validation
+
+For Windows:
+
+✓ Required KBs installed
+✓ No failed Windows Updates
+✓ Reboot completed
+✓ OS boots successfully
+✓ Windows Update health is normal
+
+For Linux:
+
+✓ Required packages installed
+✓ Kernel version validated
+✓ Package manager reports expected state
+✓ Reboot completed if required
+✓ OS boots successfully
+Security validation
+
+You should investigate whether your organization has vulnerability scanning tools such as:
+
+Tenable/Nessus
+Qualys
+AWS Inspector
+Defender
+CrowdStrike
+etc.
+
+The goal is something like:
+
+Golden AMI
+    │
+    ▼
+Vulnerability Scan
+    │
+    ├── Critical → FAIL
+    ├── High     → Investigate
+    └── Medium/Low → According to policy
+
+Don't invent the severity thresholds. Your security team should define those.
+
+AWS Systems Manager validation
+
+Systems Manager Patch Manager can scan managed nodes and provide patch compliance information. AWS specifically notes that compliance is determined according to the organization's configured patch baseline; "compliant" means the patches defined by that baseline have been installed, not that the entire machine is necessarily secure.
+
+This distinction is excellent to mention in your KB.
+
+You could write:
+
+Patch compliance must be validated against the organization's approved patch baseline. Patch compliance alone must not be considered equivalent to overall security compliance.
+
+AWS also provides compliance reports showing missing patches and the patch baseline used for the compliance calculation.
+
+Documentation
+
+AWS — Working with Patch Manager compliance reports
+
+AWS — Systems Manager Compliance
+
+3. Image retirement process
+
+This is asking:
+
+What happens to an old Golden AMI after a new one is released?
+
+For example:
+
+AMI v1.0
+     ↓
+AMI v1.1 released
+     ↓
+What happens to v1.0?
+
+You should establish a lifecycle.
+
+I recommend thinking in these stages:
+
+ACTIVE
+   ↓
+SUPERSEDED
+   ↓
+DEPRECATED
+   ↓
+DISABLED / RETAINED
+   ↓
+DELETED
+Important AWS distinction
+
+Deprecating an AMI does NOT delete it.
+
+AWS says that a deprecated AMI is treated as out of date and is hidden from normal AMI listings for users, but existing launch templates, Auto Scaling groups, and users who know the AMI ID can still use it. To prevent further use and stop paying for its snapshots, the AMI must eventually be deregistered.
+
+This is an important point for your KB.
+
+Example policy
+
+You could propose:
+
+New AMI released
+      ↓
+Previous AMI
+      ↓
+Mark deprecated
+      ↓
+Retain for X days
+      ↓
+Check dependencies
+      ↓
+Deregister AMI
+      ↓
+Delete associated snapshots
+
+But don't choose X days yourself yet.
+
+You need to ask your team:
+
+How long do we need rollback capability?
+Are old AMIs referenced by Launch Templates?
+Are old AMIs referenced by Terraform?
+Are there production servers still using them?
+Is there a compliance retention requirement?
+AWS Image Builder makes this easier
+
+Image Builder has Lifecycle Policies that can automate:
+
+Deprecation
+Disabling
+Deletion
+
+of old images and associated resources.
+
+This is something I would definitely include in your research.
+
+Documentation
+
+AWS — Manage Image Builder lifecycle policies
+
+AWS — Deprecate an Amazon EC2 AMI
+
+4. Image version control strategy
+
+This is asking:
+
+How do we know exactly which version of the Golden AMI is running?
+
+Imagine you have:
+
+Golden Windows 2022
+
+v1.0.0
+v1.0.1
+v1.0.2
+v1.1.0
+v2.0.0
+
+You need to be able to answer:
+
+"What changed between v1.0.1 and v1.0.2?"
+
+Your versioning system should therefore capture:
+
+Version
+    ↓
+Source AMI
+    ↓
+OS version
+    ↓
+Patch level
+    ↓
+Installed software
+    ↓
+Security baseline
+    ↓
+Build date
+    ↓
+Build ID
+    ↓
+Test results
+    ↓
+Approval
+Example
+Golden AMI
+Windows Server 2022
+Version: 1.2.3
+Build Date: 2026-09-01
+Patch Level: September 2026
+Security Baseline: v3.2
+Monitoring Agent: 8.x
+EDR: Approved Version
+
+Then your documentation should say:
+
+Every Golden AMI must have a unique immutable version and corresponding build metadata.
+
+Why immutability matters
+
+You don't want this:
+
+AMI v1
+   ↓
+Someone modifies it
+   ↓
+Still called v1
+
+Instead:
+
+AMI v1
+   ↓
+Change required
+   ↓
+Build v2
+
+This gives you traceability and makes rollback possible.
+
+AWS Image Builder recipes use semantic versions and each pipeline build creates a new image version. Image Builder lifecycle policies can then manage older versions.
+
+5. Testing and QA requirements before release
+
+This is one of the most important sections.
+
+You need a release gate.
+
+A Golden AMI shouldn't become "production approved" just because the Image Builder pipeline succeeded.
+
+I'd structure your QA as:
+
+                 AMI Build
+                    │
+                    ▼
+              Build Successful?
+                    │
+             ┌──────┴──────┐
+             │             │
+            NO            YES
+             │             │
+           FAIL            ▼
+                    OS Validation
+                         │
+                         ▼
+                    Security Scan
+                         │
+                         ▼
+                    Agent Testing
+                         │
+                         ▼
+                    Functional Test
+                         │
+                         ▼
+                    Compliance Test
+                         │
+                         ▼
+                    QA Approval
+                         │
+                         ▼
+                  Production Release
+Minimum QA checklist
+Infrastructure
+EC2 launches successfully
+Instance status checks pass
+Correct instance configuration
+Network connectivity works
+Storage works
+Operating system
+OS boots
+Login works
+Expected OS version
+Expected patch level
+No unexpected services
+Security
+Security agent running
+Monitoring agent running
+Firewall configured
+Required hardening applied
+Vulnerability scan completed
+AWS
+SSM connectivity
+IAM role works
+CloudWatch/monitoring works
+Required AWS agents work
+Application
+
+If the AMI contains application software:
+
+Application starts
+Required services start
+Required ports available
+Dependencies available
+Documentation
+Version recorded
+Build ID recorded
+Source AMI recorded
+Test results stored
+Approval recorded
+6. Rollback procedures
+
+This section answers:
+
+What do we do if the new Golden AMI breaks something?
+
+For example:
+
+                  AMI v2
+                    │
+                    ▼
+                 Release
+                    │
+                    ▼
+             Production issue
+                    │
+                    ▼
+             Rollback decision
+                    │
+                    ▼
+               AMI v1
+
+The most important concept is:
+
+Never overwrite the previous known-good AMI.
+
+Instead:
+
+v1.0.0 = Known good
+v1.0.1 = New release
+
+If v1.0.1 fails:
+
+Production
+    ↓
+Rollback
+    ↓
+v1.0.0
+What should your rollback procedure cover?
+1. Identify failed version
+AMI: ami-xxxxxxxx
+Version: 1.0.1
+2. Stop new deployments
+
+Prevent Terraform/CloudFormation/Launch Templates from using the bad version.
+
+3. Restore previous AMI reference
+
+For example:
+
+Launch Template
+
+AMI:
+ami-OLD-KNOWN-GOOD
+4. Redeploy
+
+For Auto Scaling environments:
+
+Launch Template
+      ↓
+Previous AMI
+      ↓
+New instances
+5. Investigate
+
+Determine:
+
+What changed?
+Why did testing miss it?
+Is the AMI permanently rejected?
+Does the next version need a fix?
+Important point
+
+Your rollback strategy should not simply be "restore the old AMI."
+
+You also need to know where the AMI is referenced.
+
+Potential references include:
+
+Terraform
+CloudFormation
+Launch Templates
+Auto Scaling Groups
+EKS nodes
+AWS Batch
+Custom deployment scripts
+
+So your KB should include:
+
+Before retiring an AMI, verify that no active infrastructure references it.
+
+7. Documentation standards
+
+This is where everything comes together.
+
+Every Golden AMI release should have a record.
+
+I'd recommend maintaining an AMI Release Record.
+
+Example:
+
+Field	Example
+AMI Name	golden-windows2022
+Version	1.2.0
+AMI ID	ami-xxxxxxxx
+Source AMI	ami-yyyyyyyy
+OS	Windows Server 2022
+Patch Level	September 2026
+Build Date	2026-09-01
+Image Builder Pipeline	windows-golden-ami
+Security Scan	PASS
+QA	PASS
+Approval	Approved
+Regions	us-east-1, us-west-2
+Status	Active
+I would also add a Change Log
+
+This is extremely useful.
+
+Version	Date	Changes	Test Result	Status
+1.0.0	Aug 2026	Initial baseline	PASS	Retired
+1.0.1	Sep 2026	OS security patches	PASS	Active
+1.0.2	Sep 2026	Agent update	FAIL	Rejected
+1.0.3	Sep 2026	Agent update fixed	PASS	Active
+
+This gives you a complete audit trail.
+
+How all 7 requirements fit together
+
+Your ticket is really asking you to design this:
+
+┌─────────────────────────────────────────────────────────────┐
+│                GOLDEN AMI LIFECYCLE                         │
+└─────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+                 Monthly / Emergency
+                     Patch Cycle
+                         │
+                         ▼
+                 Build New Version
+                         │
+                         ▼
+                ┌──────────────────┐
+                │ Patch Validation │
+                └────────┬─────────┘
+                         ▼
+                 Security Testing
+                         │
+                         ▼
+                   QA Validation
+                         │
+                 ┌───────┴────────┐
+                 │                │
+               FAIL              PASS
+                 │                │
+                 ▼                ▼
+              Reject           Approve
+                 │                │
+                 │                ▼
+                 │          Release AMI
+                 │                │
+                 │                ▼
+                 │        Regional Distribution
+                 │                │
+                 │                ▼
+                 │         Previous AMI
+                 │                │
+                 │                ▼
+                 │           Deprecate
+                 │                │
+                 │                ▼
+                 │         Retention Period
+                 │                │
+                 │                ▼
+                 │             Delete
+                 │
+                 └──────→ Rebuild
+What I recommend you put in the KB
+
+For Section 2, I'd structure the actual Confluence article as:
+
+2. AMI Maintenance and Lifecycle Management
+
+2.1 Purpose
+
+2.2 Golden AMI Maintenance Strategy
+
+2.3 Recommended Patching Frequency
+    2.3.1 Monthly patch cycle
+    2.3.2 Emergency/critical vulnerability patching
+    2.3.3 Patch ownership
+
+2.4 Patch Validation Methodology
+    2.4.1 OS patch validation
+    2.4.2 Security validation
+    2.4.3 Agent validation
+    2.4.4 Compliance validation
+
+2.5 Image Version Control
+    2.5.1 Versioning
+    2.5.2 Build metadata
+    2.5.3 Change tracking
+
+2.6 Testing and QA
+    2.6.1 Functional testing
+    2.6.2 Security testing
+    2.6.3 Application testing
+    2.6.4 QA approval
+
+2.7 Release Process
+
+2.8 Rollback Procedure
+
+2.9 Image Retirement
+    2.9.1 Deprecation
+    2.9.2 Retention
+    2.9.3 Deregistration
+    2.9.4 Snapshot cleanup
+
+2.10 Documentation Requirements
+
+2.11 Ownership and Responsibilities
+
+2.12 AWS References
+The AWS documentation you should research
+
+These are the pages I'd use as your primary sources.
+
+1. Patch Manager — Start here
+
+AWS Systems Manager Patch Manager
+
+This covers patching, patch baselines, scheduling, compliance, and reporting.
+
+2. Patch compliance
+
+AWS Patch Manager Compliance Reports
+
+Use this for your patch validation methodology.
+
+3. Compliance
+
+AWS Systems Manager Compliance
+
+Useful for your compliance/QA section.
+
+4. Patching non-compliant nodes
+
+AWS — Patching noncompliant managed nodes
+
+Useful for understanding Scan versus Scan and install.
+
+5. AMI deprecation
+
+AWS — Deprecate an Amazon EC2 AMI
+
+Definitely read this one for your Image Retirement section.
+
+6. Image Builder lifecycle policies
+
+AWS — Manage Image Builder lifecycle policies
+
+This is probably the most important document for AMI lifecycle management. Image Builder lifecycle policies can automate deprecation, disabling, and deletion of outdated images and associated resources.
+
+One important distinction for your ticket
+
+There are actually two different maintenance activities you should document:
+
+A. Maintaining the Golden AMI
+Golden AMI
+    ↓
+Patch
+    ↓
+Build NEW AMI
+    ↓
+Test
+    ↓
+Release
+B. Maintaining already-running EC2 instances
+Running EC2
+    ↓
+Patch Manager
+    ↓
+Patch
+    ↓
+Compliance check
+
+Don't mix these together in the KB.
+
+AWS Systems Manager Patch Manager can patch running managed nodes and report their compliance, while Image Builder is used to produce new image versions.
+
+So your overall architecture could eventually be:
+
+                 GOLDEN AMI PIPELINE
+                        │
+               EC2 Image Builder
+                        │
+             ┌──────────┴─────────┐
+             │                    │
+          Build                 Test
+             │                    │
+             └──────────┬─────────┘
+                        │
+                      AMI
+                        │
+                Distribution
+                        │
+             ┌──────────┼──────────┐
+             ▼          ▼          ▼
+           Dev         QA        Prod
+             │          │          │
+             └──────────┼──────────┘
+                        │
+                 Running EC2 Fleet
+                        │
+                        ▼
+                SSM Patch Manager
+                        │
+                        ▼
+                Patch Compliance
+
+That separation will make your final KB much more professional.
+
+And for the retirement side, remember: deprecation hides an AMI from normal selection but does not stop existing launch references or delete the AMI; actual cleanup requires deregistration, and Image Builder lifecycle policies can automate the lifecycle stages.
+
+If you're building this KB step-by-step, I would tackle Section 2.3 "Recommended Patching Frequency" next, because that's where you need to make an actual recommendation rather than simply describe AWS functionality.
