@@ -1,0 +1,409 @@
+3. AWS-native tools available for image creation
+
+This is one of the most important sections of your research.
+
+You should compare the available approaches, not just mention Image Builder.
+
+Tool 1 — EC2 Image Builder ⭐
+
+This should probably be your primary recommendation.
+
+AWS Image Builder allows you to automate:
+
+Base AMI
+   ↓
+Components
+   ↓
+Build
+   ↓
+Test
+   ↓
+AMI
+   ↓
+Distribution
+
+AWS explicitly provides build, test and distribution workflows. The build stage creates the image, the test stage launches an instance from that image and tests it, and distribution copies the resulting image to target Regions/accounts.
+
+Read these first
+
+AWS — What is EC2 Image Builder?
+
+AWS — Manage build, test and distribution workflows
+
+AWS — Manage recipes in Image Builder
+
+AWS — Use components to customize your Image Builder image
+
+4. Recommended image creation workflow
+
+This is probably the most important part of your KB.
+
+I recommend documenting a workflow like this:
+
+                    ┌───────────────┐
+                    │   Base AMI    │
+                    │ Windows/Linux │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │   Customize   │
+                    │   Components  │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │   Hardening   │
+                    │   + Security  │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │     Patch     │
+                    │     OS        │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │    Validate   │
+                    │   Build Tests │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │  Create AMI   │
+                    │  Version X.Y.Z│
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │  Test Golden  │
+                    │      AMI      │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │    Approval   │
+                    └───────┬───────┘
+                            ↓
+                    ┌───────────────┐
+                    │  Distribution │
+                    │ Regions/Acct  │
+                    └───────────────┘
+
+AWS Image Builder naturally maps to this model through Build → Test → Distribution workflows.
+
+Step 1 — Select base AMI
+
+Example:
+
+Windows Server 2022
+        OR
+RHEL 9
+        OR
+Ubuntu 24.04
+
+You need to decide:
+
+Who provides the base image?
+Is it an AWS-managed image?
+Is it a Marketplace image?
+Is it internally maintained?
+How often is the base image updated?
+
+The base image becomes the foundation of your Golden AMI.
+
+Step 2 — Add Image Builder components
+
+This is where you customize the image.
+
+AWS Image Builder uses components to perform build and test actions. Components are based on YAML documents executed by AWS Task Orchestrator and Executor (AWSTOE).
+
+For example:
+
+Component 1
+Install Windows updates
+
+Component 2
+Install New Relic
+
+Component 3
+Install security agent
+
+Component 4
+Configure Windows security settings
+
+Component 5
+Configure logging
+
+Component 6
+Install required tools
+
+You should investigate which components your organization actually needs.
+
+Documentation
+
+AWS — Use components to customize Image Builder images
+
+Step 3 — Harden the OS
+
+This is where your security baseline comes in.
+
+Your KB should explain that the Golden AMI must follow the organization's approved security standard.
+
+Potential areas:
+
+OS Hardening
+   ├── Password policies
+   ├── Firewall
+   ├── Services
+   ├── Audit policies
+   ├── Logging
+   ├── Encryption
+   ├── Security agents
+   └── Vulnerability remediation
+
+Important: Don't invent the actual corporate security settings.
+
+If your company has:
+
+CIS benchmark
+Security baseline
+Vulnerability management standard
+Windows hardening standard
+Linux hardening standard
+
+reference those documents from your KB.
+
+Step 4 — Patch
+
+The Golden AMI should have an explicitly documented patching process.
+
+For example:
+
+Base AMI
+   ↓
+Check latest approved patches
+   ↓
+Install patches
+   ↓
+Reboot if required
+   ↓
+Verify patch level
+   ↓
+Continue build
+
+You need to establish whether the company wants:
+
+Monthly Golden AMI builds
+Build on Patch Tuesday
+Build whenever critical vulnerabilities appear
+Scheduled automatic builds
+
+This becomes part of the maintenance standard.
+
+Step 5 — Test
+
+Don't just create an AMI and assume it works.
+
+AWS Image Builder has a dedicated Test stage where it launches an instance from the newly created image and runs test components.
+
+You should define a test checklist.
+
+Basic tests
+✓ EC2 launches
+✓ Instance passes status checks
+✓ OS boots
+✓ Login works
+✓ Disk configuration correct
+✓ Network works
+Software tests
+✓ Monitoring agent running
+✓ Security agent running
+✓ SSM available
+✓ Required services running
+Security tests
+✓ Required patches installed
+✓ Security baseline applied
+✓ No critical vulnerability
+✓ Firewall configured
+Application tests
+
+If the AMI contains application-specific software:
+
+✓ Application starts
+✓ Required ports available
+✓ Dependencies available
+
+AWS allows multiple test workflows and test groups, including running tests in parallel.
+
+Documentation
+
+AWS — Configure Image Builder pipeline workflows
+
+5. Image naming conventions
+
+This is asking:
+
+How should someone identify an AMI just by looking at its name?
+
+Don't randomly name AMIs like:
+
+myserver-final
+myserver-final2
+new-server
+test-image
+latest
+
+That's exactly what your standard should eliminate.
+
+You should propose a structured naming convention.
+
+For example:
+
+<Organization>-<OS>-<Version>-<ReleaseDate>-<Revision>
+
+Example:
+
+Vibrant-Windows2022-1.0.0-202608-v1
+
+or:
+
+golden-windows2022-2026.08-v1
+
+The exact format should be decided based on your company's existing naming standards.
+
+Important distinction
+
+AMI name
+
+golden-windows2022-2026.08-v1
+
+AMI version
+
+1.0.0
+
+AMI ID
+
+ami-0123456789abcdef
+
+Don't confuse these three.
+
+AWS's Image Builder distribution configuration supports specifying the output AMI name and description.
+
+Documentation
+
+AWS — Create AMI distribution configuration
+
+6. Versioning standards
+
+This is different from the AMI name.
+
+AWS Image Builder uses semantic versioning:
+
+MAJOR.MINOR.PATCH
+
+For example:
+
+1.0.0
+1.0.1
+1.1.0
+2.0.0
+
+AWS documents Image Builder recipe versions using this format.
+
+You can define an organizational policy such as:
+
+Change	Version
+Security patch	Patch
+Agent update	Patch/Minor
+Configuration change	Minor
+New OS version	Major
+Major baseline change	Major
+
+For example:
+
+1.0.0
+   ↓
+Security patch
+   ↓
+1.0.1
+
+Then:
+
+1.0.1
+   ↓
+New monitoring agent
+   ↓
+1.1.0
+
+Then:
+
+1.1.0
+   ↓
+Move Windows Server 2022 → 2025
+   ↓
+2.0.0
+
+Important: The exact mapping of changes to Major/Minor/Patch should be your organization's policy. AWS gives you the versioning mechanism; your KB defines how your team uses it.
+
+Documentation
+
+AWS — Image Builder recipe versioning
+
+AWS — Image Builder image API and semantic versions
+
+7. Tagging standards
+
+This section asks:
+
+What metadata must every Golden AMI have?
+
+AWS recommends tags as metadata for identifying resources by things such as purpose, owner, and environment.
+
+You could propose something like:
+
+Tag	Example
+Name	golden-windows2022
+OS	WindowsServer2022
+OSVersion	2022
+ImageType	GoldenAMI
+Version	1.2.0
+Owner	InfraCloudEngineering
+Environment	Shared
+BuildDate	2026-08-31
+PatchLevel	2026-08
+SecurityBaseline	CIS
+Source	AWS
+
+But don't copy this blindly into your KB.
+
+First check whether your organization already has mandatory tags such as:
+
+Application
+CostCenter
+Owner
+BusinessUnit
+Environment
+DataClassification
+
+Your Golden AMI standard should follow the company's existing tagging policy.
+
+AWS documentation
+
+AWS — Tag your Amazon EC2 resources
+
+There's also an important Image Builder-specific point: tags on the Image Builder image resource and tags on the resulting EC2 AMI are separate concepts, particularly when lifecycle policies use tags.
+
+8. Regional distribution considerations
+
+This is a very important AWS concept.
+
+AMI = Regional resource.
+
+For example:
+
+us-east-1
+    │
+    └── AMI-123
+
+us-west-2
+    │
+    └── AMI-456
+
+Even if AMI-456 is a copy of AMI-123, they are different AMI resources.
+
+AWS explicitly states that AMIs are Region-specific. If you need the image in another Region, you need to copy it.
