@@ -1,0 +1,65 @@
+Security
+
+Instead of every engineer configuring security differently:
+
+Server A → security configured manually
+Server B → slightly different configuration
+Server C → missing configuration
+
+you have:
+
+Golden AMI
+     │
+ ┌───┼────┐
+ ▼   ▼    ▼
+EC2  EC2  EC2
+
+All start from the same baseline.
+
+Consistency
+
+Every server starts with:
+
+Same OS baseline
+Same patch level
+Same configuration
+Same required agents
+Same security controls
+Faster deployment
+
+Instead of:
+
+Launch EC2
+   ↓
+Install software
+   ↓
+Patch
+   ↓
+Configure
+   ↓
+Harden
+   ↓
+Install agents
+   ↓
+Test
+
+you can:
+
+Launch EC2 from Golden AMI
+            ↓
+       Application config
+            ↓
+           Ready
+Reduced configuration drift
+
+If engineers manually configure servers, two servers can gradually become different.
+
+Golden AMIs provide a known starting point.
+
+Compliance
+
+You can demonstrate:
+
+"Production EC2 instances are deployed from approved AMI version X."
+
+That gives you much better auditability.
