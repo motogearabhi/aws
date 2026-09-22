@@ -1,0 +1,679 @@
+AWS EC2 Security Hardening Standards
+
+Document Type: Knowledge Base Article
+Status: Recommended Standard
+Version: 1.0
+Applies To: Amazon EC2 Linux and Windows workloads
+Primary Services: Amazon EC2, IAM, EBS, KMS, Secrets Manager, CloudWatch, Systems Manager, Security Hub
+Review Frequency: At least annually and whenever a major OS/AWS security change is introduced
+
+1. Purpose
+
+This document defines the minimum security-hardening requirements for operating systems running on Amazon EC2.
+
+The objectives are to:
+
+Reduce the attack surface of EC2 instances.
+Establish consistent OS security configurations.
+Enforce least-privilege access.
+Protect credentials, secrets, and data.
+Provide centralized logging and auditing.
+Standardize patching and configuration management.
+Align infrastructure with recognized security benchmarks, primarily CIS Benchmarks and AWS security best practices.
+
+CIS Benchmarks provide secure configuration guidance for specific operating systems. The benchmark selected must match the actual operating-system distribution and version deployed.
+
+2. Security Hardening Baseline
+
+The following controls are the minimum baseline for production EC2 instances.
+
+Control Area	Minimum Standard	Required
+OS benchmark	Apply the applicable CIS Level 1 baseline; evaluate Level 2 where required	Yes
+OS patching	Security patches applied through centralized patch management	Yes
+Local administrator access	Named administrative accounts; no shared administrator accounts	Yes
+Remote administration	Prefer AWS Systems Manager Session Manager over direct SSH/RDP	Yes
+Passwords	Strong passwords/passphrases and compromised-password protection	Yes
+MFA	MFA required for AWS administrative access	Yes
+IAM	EC2 applications use IAM roles rather than static AWS credentials	Yes
+IMDS	IMDSv2 required	Yes
+EBS	Encryption enabled by default	Yes
+Secrets	Secrets stored in AWS Secrets Manager or approved enterprise vault	Yes
+Logging	OS and security logs forwarded centrally	Yes
+Firewall	Host firewall enabled and restricted to required traffic	Yes
+Services	Unnecessary services/packages disabled or removed	Yes
+Monitoring	CloudWatch monitoring and alerting enabled	Yes
+Configuration management	Systems Manager used where supported	Yes
+3. Operating System Hardening
+3.1 CIS Benchmarks
+
+The applicable CIS Benchmark must be used as the authoritative OS configuration baseline.
+
+Examples include:
+
+CIS Ubuntu Linux Benchmark
+CIS Red Hat Enterprise Linux Benchmark
+CIS Amazon Linux Benchmark
+CIS Microsoft Windows Server Benchmark
+
+CIS publishes separate benchmarks for different operating systems and versions, so the benchmark must correspond to the deployed OS version rather than applying a generic Linux or Windows baseline.
+
+Standard
+
+All production EC2 instances shall:
+
+Use a supported operating system.
+Use a CIS benchmark applicable to that OS/version.
+Target CIS Level 1 as the minimum baseline.
+Evaluate Level 2 controls for systems containing sensitive or critical workloads.
+Document and approve deviations from the baseline.
+Reassess the configuration after major OS upgrades.
+Recommended implementation
+
+Where possible, automate CIS compliance rather than manually configuring individual instances.
+
+The hardening process should follow:
+
+Approved AMI
+    ↓
+CIS Baseline
+    ↓
+Automated Configuration
+    ↓
+Security Validation
+    ↓
+Production Deployment
+    ↓
+Continuous Compliance Monitoring
+4. Password Policies
+
+Password policies should be applied to local human accounts where password authentication is required.
+
+NIST recommends allowing long passwords/passphrases, avoiding arbitrary composition requirements, blocking commonly compromised passwords, and avoiding forced periodic password changes unless there is evidence of compromise.
+
+Standard
+Minimum password length: 14 characters for human local accounts, unless an approved platform-specific standard requires otherwise.
+Allow passphrases.
+Do not expose passwords in scripts, AMIs, user-data, source code, or configuration files.
+Block known/common compromised passwords where technically possible.
+Do not require arbitrary periodic password changes solely because a calendar interval has elapsed.
+Force password changes when compromise is suspected or confirmed.
+Disable password authentication for accounts that are intended to use key-based or SSM-based access.
+Service accounts should not have interactive login capability unless explicitly required.
+Service credentials should preferably be replaced with IAM roles or managed secrets.
+Linux
+
+Review and harden:
+
+PAM configuration
+/etc/login.defs
+/etc/security/pwquality.conf
+Password hashing configuration
+Account lockout controls
+SSH authentication configuration
+Windows
+
+Review:
+
+Local Security Policy
+Account lockout policy
+Password policy
+Windows Defender/endpoint security policy
+Remote Desktop authentication configuration
+5. Local Administrator Controls
+
+Local administrative access represents a high-impact attack path and must therefore be tightly controlled.
+
+Standard
+Do not use shared administrator/root credentials.
+Create named administrative accounts where local administration is required.
+Administrative privileges must be granted only when required.
+Use sudo on Linux rather than routinely operating as root.
+Use Windows administrative groups only for approved administrators.
+Disable or restrict unnecessary default accounts.
+Remove former administrators promptly.
+Do not store administrator passwords in scripts.
+Do not embed credentials in AMIs.
+Administrative activity must be auditable.
+
+For AWS-level administration, use IAM roles and federation rather than distributing long-lived AWS access credentials. AWS specifically recommends identity federation and IAM roles where possible.
+
+6. Remote Access
+6.1 Preferred Access Method
+
+AWS Systems Manager Session Manager should be the default method for administrative access to EC2 where technically supported.
+
+Session Manager provides interactive instance access without requiring inbound SSH/RDP ports, bastion hosts, or SSH key management, and can provide auditable session logging.
+
+Standard
+
+Preferred:
+
+Administrator
+      |
+      v
+AWS IAM
+      |
+      v
+Systems Manager Session Manager
+      |
+      v
+EC2 Instance
+
+Avoid where possible:
+
+Internet
+   |
+   +---- TCP/22 ----> Linux EC2
+   |
+   +---- TCP/3389 --> Windows EC2
+
+If SSH or RDP is required:
+
+Restrict source IP ranges.
+Never expose administrative ports to 0.0.0.0/0.
+Use strong authentication.
+Use MFA through the appropriate access architecture.
+Log administrative access.
+Periodically review firewall rules.
+7. Logging and Auditing
+
+Every production EC2 instance must provide sufficient logging to investigate authentication events, privilege escalation, configuration changes, and security incidents.
+
+Linux
+
+At minimum, collect:
+
+Authentication logs
+sudo activity
+SSH events, if SSH is enabled
+System/service logs
+Kernel/security events where applicable
+Application security logs
+Windows
+
+At minimum, collect:
+
+Windows Security Event Log
+System Event Log
+Application Event Log where relevant
+PowerShell operational logging where required
+RDP/security events where RDP is enabled
+
+The Amazon CloudWatch Agent can collect logs and system-level metrics from both Linux and Windows EC2 instances.
+
+Standard
+
+Logs should:
+
+Be forwarded to centralized CloudWatch log groups or an approved SIEM.
+Have appropriate retention periods.
+Be protected from unauthorized modification/deletion.
+Include timestamps synchronized through approved time sources.
+Generate alerts for high-value security events.
+
+Recommended security alerts include:
+
+Repeated authentication failures.
+Successful privileged logins.
+Creation of privileged accounts.
+Changes to sudo/admin membership.
+SSH/RDP configuration changes.
+Security service shutdown.
+Unexpected firewall changes.
+Changes to critical system files.
+8. File System Protections
+Linux
+
+Protect critical files and directories, including:
+
+/etc/passwd
+/etc/shadow
+/etc/group
+/etc/sudoers
+/etc/ssh/
+ /var/log/
+ /boot/
+
+Recommended controls:
+
+Correct ownership and permissions.
+Restrict write access to privileged users.
+Use root ownership where appropriate.
+Prevent unauthorized modification of security configuration.
+Apply filesystem mount protections where appropriate, such as nodev, nosuid, and noexec based on application requirements.
+Enable file-integrity monitoring for critical workloads where required.
+Windows
+
+Protect:
+
+Windows system directories.
+Registry security configuration.
+Security policy.
+Service configuration.
+Administrative shares.
+Application configuration containing sensitive information.
+
+NTFS permissions should follow least privilege.
+
+9. Service Hardening
+
+Every EC2 instance should run only the services required for its workload.
+
+Standard
+
+For each service:
+
+Identify its business/application purpose.
+Confirm the service owner.
+Confirm required network ports.
+Run it under the least-privileged identity possible.
+Disable unnecessary services.
+Remove unnecessary packages/software.
+Monitor critical services.
+Linux
+
+Regularly review:
+
+systemctl list-units --type=service
+systemctl list-unit-files --state=enabled
+
+Disable services that are not required.
+
+Windows
+
+Review:
+
+Windows Services
+Scheduled Tasks
+Startup applications
+Installed software
+Listening ports
+
+Do not disable security or operating-system services solely because they appear unnecessary without validating their dependencies.
+
+10. Host Firewall Configuration
+
+The host firewall must be enabled on production instances.
+
+Standard
+Default-deny inbound traffic where operationally feasible.
+Permit only required application ports.
+Restrict administrative ports to approved management networks.
+Avoid broad source ranges.
+Document each exception.
+Review firewall rules periodically.
+
+Examples:
+
+Traffic	Source	Action
+HTTPS/443	Approved application networks	Allow
+HTTP/80	Only if explicitly required	Allow
+SSH/22	Management network only	Allow/Prefer SSM
+RDP/3389	Management network only	Allow/Prefer SSM
+Everything else	Any	Deny
+
+AWS also recommends least-permissive security-group rules for EC2 workloads.
+
+Important: AWS Security Groups and the host firewall are complementary controls. Do not rely on only one layer.
+
+11. AWS IAM Roles and Permissions
+
+EC2 workloads must use IAM roles for AWS API access whenever possible.
+
+Applications should not contain:
+
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+
+in:
+
+Source code
+Configuration files
+AMIs
+User-data
+Environment files committed to repositories
+Shell scripts
+CI/CD artifacts
+
+AWS documents the use of IAM roles to provide temporary credentials to applications running on EC2 through the Instance Metadata Service.
+
+Standard
+
+IAM permissions must follow:
+
+Least privilege — grant only the permissions required to perform the workload's function.
+
+Avoid attaching broad policies such as:
+
+AdministratorAccess
+PowerUserAccess
+*
+
+to application instance roles unless specifically justified and approved.
+
+Example
+
+Instead of:
+
+EC2 Application
+      |
+      +---- AdministratorAccess
+
+use:
+
+EC2 Application
+      |
+      +---- ApplicationRole
+                |
+                +---- s3:GetObject
+                +---- kms:Decrypt
+                +---- secretsmanager:GetSecretValue
+
+Permissions should also be periodically reviewed and removed when no longer required.
+
+12. EC2 Instance Metadata Protection
+
+IMDSv2 must be required for production EC2 instances.
+
+AWS supports configuring an instance so that IMDSv2 is required by setting HttpTokens to required.
+
+Standard
+HttpEndpoint = enabled
+HttpTokens   = required
+
+For containerized workloads, review the metadata hop limit according to the network architecture; AWS recommends a hop limit of 2 for container environments when IMDSv2 is required.
+
+Validation
+
+Instances should be monitored for configurations where:
+
+HttpTokens != required
+
+Any exception must be documented and approved.
+
+13. Encryption Requirements
+
+Encryption must be enabled for sensitive data both at rest and in transit.
+
+13.1 EBS Encryption
+
+EBS encryption by default must be enabled in every AWS Region where EC2 workloads are deployed.
+
+AWS supports enabling EBS encryption by default so newly created volumes and snapshot copies are encrypted automatically. The setting is Region-specific and does not retroactively encrypt existing volumes.
+
+Standard
+Enable EBS encryption by default.
+Use the appropriate AWS KMS key.
+Use customer-managed KMS keys where organizational requirements require independent key administration.
+Restrict KMS key permissions.
+Monitor unauthorized KMS usage.
+Ensure snapshots are also protected.
+
+Example:
+
+aws ec2 enable-ebs-encryption-by-default \
+  --region <region>
+
+Existing unencrypted EBS volumes require a migration/remediation process because enabling encryption by default does not change their existing encryption state.
+
+14. Secrets Management
+
+Secrets must never be hardcoded into applications or infrastructure configuration.
+
+Use AWS Secrets Manager for:
+
+Database credentials
+API credentials
+Application passwords
+Third-party service credentials
+Other sensitive runtime secrets
+
+AWS recommends storing sensitive credentials in Secrets Manager, limiting access using least-privilege IAM, monitoring secrets, and using rotation where appropriate.
+
+Standard
+Application
+     |
+     v
+IAM Role
+     |
+     v
+Secrets Manager
+     |
+     v
+Secret
+
+Do not use:
+
+Application
+     |
+     +---- password in source code
+     +---- password in AMI
+     +---- password in Git
+     +---- password in user-data
+
+Secrets should be rotated according to their risk and application capabilities. AWS Secrets Manager supports automated rotation for supported secret types.
+
+15. CloudWatch Logging and Monitoring
+
+The CloudWatch Agent should be deployed to production EC2 instances where OS-level logs and metrics are required.
+
+The agent supports Linux and Windows and can collect system metrics and log files from EC2 instances.
+
+Recommended telemetry
+
+Metrics
+
+CPU utilization
+Memory utilization
+Disk utilization
+Disk/inode usage
+Network activity
+Process/service health
+
+Logs
+
+Authentication logs
+OS security logs
+Application logs
+System logs
+Security-agent logs
+Alerting
+
+Alerts should be configured for security-relevant events rather than simply collecting data.
+
+Examples:
+
+High authentication failures
+        ↓
+CloudWatch
+        ↓
+Alarm
+        ↓
+SNS / SIEM / Incident Response
+16. AWS Systems Manager Integration
+
+AWS Systems Manager should be used as the primary management platform for supported EC2 workloads.
+
+Recommended components include:
+
+Systems Manager Agent
+Session Manager
+Patch Manager
+Run Command
+State Manager
+Inventory
+Compliance
+
+Session Manager provides administrative access without exposing inbound SSH/RDP ports.
+
+Patch Manager can scan and install missing patches and provides patch-compliance reporting. AWS recommends using custom patch baselines when predefined baselines do not meet organizational requirements.
+
+Patch Management Standard
+
+Production instances must:
+
+Be registered as Systems Manager managed nodes.
+Receive security patches according to the organization's patch SLA.
+Use approved patch baselines.
+Be grouped using environment/application tags where appropriate.
+Report patch compliance.
+Have exceptions documented.
+
+Avoid operating systems that have reached end-of-life because vendors may no longer provide security updates.
+
+17. AWS Security Hub and CIS Monitoring
+
+AWS Security Hub CSPM can continuously evaluate AWS resources against supported security standards, including the CIS AWS Foundations Benchmark. AWS currently documents support for CIS AWS Foundations Benchmark v5.0.0 along with earlier supported versions.
+
+Recommended controls include:
+
+CIS AWS Foundations Benchmark
+AWS Foundational Security Best Practices
+Relevant organizational security standards
+
+CIS v5 includes controls covering areas such as CloudTrail, AWS Config, EC2 security groups, VPC Flow Logs, and EBS encryption.
+
+Security Hub should be enabled across all required AWS Regions because Security Hub findings are Region-specific.
+
+18. Configuration Compliance
+
+The following controls should be continuously assessed:
+
+                 EC2 Security Baseline
+                         |
+       +-----------------+------------------+
+       |                 |                  |
+      OS               AWS                Network
+       |                 |                  |
+    CIS Scan          IAM                SG Rules
+    Patching          IMDSv2             Firewall
+    Services          EBS Encryption     VPC Controls
+    Accounts          Secrets            Flow Logs
+    Logging           CloudWatch
+
+Configuration drift should generate a finding or remediation ticket.
+
+19. Exception Management
+
+Security hardening exceptions are permitted only when there is a documented technical or business requirement.
+
+Each exception must include:
+
+Field	Requirement
+System	EC2 instance/application
+Control	Security control being bypassed
+Reason	Documented business/technical reason
+Risk	Impact of the deviation
+Compensating Control	Alternative security protection
+Owner	Accountable technical owner
+Approval	Security/platform approval
+Expiration	Required review/expiry date
+
+Exceptions must not become permanent undocumented configuration.
+
+20. Operational Compliance Checklist
+
+Use the following checklist during provisioning and periodic reviews.
+
+Operating System
+ Supported OS version
+ Applicable CIS benchmark identified
+ CIS baseline applied
+ Security patches current
+ Unnecessary packages removed
+ Unnecessary services disabled
+ Host firewall enabled
+ File permissions reviewed
+ Local administrator accounts reviewed
+ Password policy configured
+ Time synchronization configured
+Access
+ No shared administrator accounts
+ Least privilege applied
+ IAM role attached to EC2
+ Static AWS credentials removed
+ IMDSv2 required
+ SSM Agent operational
+ Session Manager preferred
+ SSH/RDP restricted or disabled
+AWS Security
+ EBS encryption enabled
+ KMS permissions restricted
+ Secrets stored in Secrets Manager
+ Security groups reviewed
+ No unnecessary public exposure
+ VPC Flow Logs enabled where required
+ Security Hub enabled
+ CIS monitoring enabled
+Logging and Monitoring
+ CloudWatch Agent installed where required
+ OS authentication logs collected
+ Security logs collected
+ Application logs collected
+ Security alerts configured
+ Log retention configured
+ SIEM integration configured where applicable
+Systems Manager
+ Instance is a managed node
+ Patch baseline assigned
+ Patch compliance monitored
+ State Manager used where appropriate
+ Inventory enabled where required
+ Administrative sessions auditable
+21. Recommended Reference Architecture
+                         AWS Account
+                              |
+                 +------------+------------+
+                 |                         |
+             IAM / SSO                 Security Hub
+                 |                         |
+                 |                    CIS Monitoring
+                 |                         |
+                 v                         |
+        Systems Manager <------------------+
+                 |
+        +--------+---------+
+        |                  |
+   Session Manager     Patch Manager
+        |                  |
+        +--------+---------+
+                 |
+                 v
+          +-------------+
+          |   EC2       |
+          |-------------|
+          | CIS Hardened|
+          | OS          |
+          |-------------|
+          | IMDSv2      |
+          | Host FW     |
+          | SSM Agent   |
+          | CW Agent    |
+          +------+------+
+                 |
+        +--------+---------+
+        |                  |
+   Encrypted EBS      Secrets Manager
+        |                  |
+       KMS                IAM
+22. Compliance and Continuous Improvement
+
+Security hardening is not a one-time configuration activity. The baseline should be continuously evaluated against:
+
+New CIS benchmark releases.
+New OS versions.
+AWS security recommendations.
+Newly disclosed vulnerabilities.
+Internal security requirements.
+Regulatory requirements applicable to the workload.
+Changes to application architecture.
+
+AWS Security Hub provides automated evaluation of supported security standards, but Security Hub controls should be treated as monitoring mechanisms rather than proof that an environment is fully compliant with a regulatory framework. AWS explicitly notes that Security Hub standards do not by themselves guarantee regulatory compliance.
+
+23. Recommended Minimum Standard
+
+For production EC2 workloads, the minimum acceptable security posture is:
+
+CIS-aligned OS + centralized patching + least-privilege IAM + IMDSv2 + encrypted EBS + managed secrets + host/network firewalls + centralized logging + Systems Manager + continuous security monitoring.
+
+This baseline should be implemented through Infrastructure as Code, hardened AMIs, Systems Manager, and automated compliance checks wherever possible rather than relying on manual configuration.
