@@ -1,0 +1,740 @@
+The future-state architecture establishes a standardized and automated process for building, validating, publishing, and deploying Golden Amazon Machine Images (AMIs) for EC2 workloads.
+
+The objective is to eliminate manual image creation and configuration drift by establishing a repeatable image lifecycle:
+
+Base OS → Hardening → Security Agents → Monitoring → Application Configuration → Testing → Golden AMI Publication → Production Deployment
+
+The architecture should support both Windows and Linux EC2 workloads while allowing operating-system-specific configurations where required.
+
+5.2 Future-State Architecture Overview
+
+The proposed architecture consists of the following layers:
+
+Base OS Image
+Hardening Layer
+Security Agent Layer
+Monitoring Layer
+Application Layer
+Golden AMI Publication
+Testing and Validation
+Production Deployment
+High-Level Architecture
+                         ┌──────────────────────────────┐
+                         │        Source Repository      │
+                         │                              │
+                         │  Image Configuration          │
+                         │  Hardening Scripts            │
+                         │  SSM Documents               │
+                         │  Application Configuration   │
+                         │  Terraform                   │
+                         └──────────────┬───────────────┘
+                                        │
+                                        ▼
+                         ┌──────────────────────────────┐
+                         │       CI/CD Pipeline          │
+                         │                              │
+                         │  Validate Configuration      │
+                         │  Trigger Image Build         │
+                         │  Security Checks             │
+                         └──────────────┬───────────────┘
+                                        │
+                                        ▼
+                 ┌─────────────────────────────────────────────┐
+                 │             AWS IMAGE BUILDER               │
+                 │                                             │
+                 │       Golden AMI Build Pipeline             │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │              1. BASE OS IMAGE               │
+                 │                                             │
+                 │  Approved AWS / Enterprise Base AMI         │
+                 │  Windows Server / Linux                     │
+                 │  Approved OS Version                        │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │             2. HARDENING LAYER              │
+                 │                                             │
+                 │  CIS Baseline                               │
+                 │  OS Security Configuration                  │
+                 │  Firewall                                   │
+                 │  Password Policy                            │
+                 │  SSH / RDP Hardening                        │
+                 │  Disable Unnecessary Services               │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │           3. SECURITY AGENT LAYER           │
+                 │                                             │
+                 │  Endpoint Security Agent                    │
+                 │  Vulnerability Scanner Agent                │
+                 │  Security Monitoring Agent                  │
+                 │  Required Enterprise Security Tools        │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │             4. MONITORING LAYER             │
+                 │                                             │
+                 │  CloudWatch Agent                           │
+                 │  Logs                                       │
+                 │  Metrics                                    │
+                 │  Monitoring Configuration                   │
+                 │  Alerting                                   │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │             5. APPLICATION LAYER             │
+                 │                                             │
+                 │  Required Middleware                        │
+                 │  Runtime Components                         │
+                 │  Enterprise Packages                        │
+                 │  Application Prerequisites                  │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │            6. TESTING & VALIDATION           │
+                 │                                             │
+                 │  OS Validation                              │
+                 │  CIS Compliance                             │
+                 │  Vulnerability Scan                         │
+                 │  Agent Validation                           │
+                 │  Service Validation                         │
+                 │  Application Validation                     │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                              ┌────────┴────────┐
+                              │                 │
+                           PASS              FAIL
+                              │                 │
+                              ▼                 ▼
+                 ┌────────────────────┐   ┌────────────────────┐
+                 │ 7. GOLDEN AMI      │   │ Remediation /      │
+                 │    PUBLICATION     │   │ Build Failure      │
+                 │                    │   │                    │
+                 │ Versioned AMI      │   │ Fix Configuration  │
+                 │ AMI Metadata       │   │ Rebuild Image      │
+                 │ Approved AMI       │   └─────────┬──────────┘
+                 └─────────┬──────────┘             │
+                           │                        │
+                           │◄───────────────────────┘
+                           │
+                           ▼
+                 ┌─────────────────────────────────────────────┐
+                 │            8. PRODUCTION DEPLOYMENT         │
+                 │                                             │
+                 │  Terraform / IaC                            │
+                 │  Launch Template                            │
+                 │  Auto Scaling Group                          │
+                 │  EC2 Instance                               │
+                 │  Approved Golden AMI                         │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                 ┌─────────────────────────────────────────────┐
+                 │          CONTINUOUS OPERATIONS              │
+                 │                                             │
+                 │  Systems Manager                            │
+                 │  Patch Management                           │
+                 │  CloudWatch                                 │
+                 │  Security Hub                               │
+                 │  Vulnerability Management                   │
+                 │  Compliance Monitoring                       │
+                 └─────────────────────┬───────────────────────┘
+                                       │
+                                       ▼
+                              Next Image Version
+5.3 Layer 1 – Base OS Image
+
+The Golden AMI process should begin with an approved and supported base operating-system image.
+
+Supported Sources
+
+The base image may originate from:
+
+AWS-provided AMIs
+AWS Marketplace images
+Approved enterprise AMIs
+Previously approved internal Golden AMIs
+Base Image Requirements
+
+The base image must:
+
+Use a supported OS version.
+Have a defined support lifecycle.
+Be approved by the platform/security team.
+Use the correct architecture.
+Have unnecessary software minimized.
+Have a documented source AMI ID.
+Be tracked by OS version and image version.
+Example
+Windows Server 2022
+        +
+Approved Base AMI
+        +
+OS Version
+        ↓
+Image Builder Pipeline
+
+The source AMI should be treated as an immutable input to the build process.
+
+5.4 Layer 2 – Hardening Layer
+
+The hardening layer establishes the organization's standard security configuration.
+
+The hardening process should be automated rather than manually applied to individual EC2 instances.
+
+Hardening Components
+Operating System
+CIS Level 1 baseline
+Password policy
+Account controls
+File-system permissions
+Security configuration
+OS auditing
+Network Security
+Host firewall
+Required ports only
+Restricted administrative access
+SSH hardening
+RDP hardening
+Service Hardening
+Disable unnecessary services.
+Remove unnecessary packages.
+Restrict unnecessary listening ports.
+Apply least-privilege service accounts.
+Flow
+Base OS
+   ↓
+CIS Baseline
+   ↓
+Security Configuration
+   ↓
+Firewall Configuration
+   ↓
+Service Hardening
+   ↓
+Hardened OS
+
+Any approved exceptions should be documented rather than embedded as undocumented manual changes.
+
+5.5 Layer 3 – Security Agent Layer
+
+Required enterprise security agents should be installed as part of the image build where appropriate.
+
+Examples include:
+
+Endpoint protection agent
+Vulnerability management agent
+Security monitoring agent
+Configuration/compliance agent
+Other enterprise security tooling
+Design Principle
+
+The image should contain the approved agent software and baseline configuration, while environment-specific registration or identity should occur during deployment when necessary.
+
+For example:
+
+Golden AMI
+    |
+    +── Security Agent Package
+    |
+    +── Agent Configuration
+    |
+    +── Required Certificates
+    |
+    └── Deployment Registration
+             |
+             ▼
+        EC2 Production
+
+This prevents an AMI from being permanently associated with a specific production machine identity.
+
+5.6 Layer 4 – Monitoring Layer
+
+The monitoring layer provides centralized visibility into EC2 health, performance, and security-related events.
+
+Recommended Components
+
+AWS Systems Manager
+
+SSM Agent
+Inventory
+Patch Manager
+Run Command
+Session Manager
+Compliance
+
+Amazon CloudWatch
+
+CPU metrics
+Memory metrics
+Disk metrics
+Network metrics
+Application logs
+OS logs
+Security logs
+
+Security Monitoring
+
+Security Hub
+Vulnerability findings
+Compliance findings
+Security-agent alerts
+Architecture
+                    EC2
+                     |
+          +----------+----------+
+          |                     |
+          ▼                     ▼
+   Systems Manager         CloudWatch Agent
+          |                     |
+          ▼                     ▼
+   Patch / Inventory       Logs / Metrics
+          |                     |
+          +----------+----------+
+                     |
+                     ▼
+              Central Monitoring
+5.7 Layer 5 – Application Layer
+
+The application layer contains components that are required for the workload to operate.
+
+This should include common application prerequisites, rather than embedding application-specific configuration into every Golden AMI.
+
+Examples
+.NET Runtime
+Java
+IIS
+Web Server
+Database client
+Enterprise middleware
+Approved monitoring libraries
+Required application dependencies
+Recommended Separation
+Golden AMI
+   |
+   +── OS
+   +── Hardening
+   +── Security Agents
+   +── Monitoring
+   +── Common Middleware
+   |
+   ▼
+Application Deployment
+   |
+   +── Application Code
+   +── Environment Configuration
+   +── Secrets
+   +── Environment-specific settings
+
+This keeps the Golden AMI reusable across environments.
+
+5.8 Layer 6 – Golden AMI Publication
+
+After the image passes all validation checks, it becomes an approved Golden AMI.
+
+Each image should have a unique version.
+
+Example Naming Standard
+<ORG>-<OS>-<CIS>-<YYYY.MM>-<BUILD>
+
+VDOT-WIN2022-CIS-L1-2026.09.001
+
+VDOT-RHEL9-CIS-L1-2026.09.001
+AMI Metadata
+
+The AMI should contain metadata such as:
+
+Attribute	Example
+OS	Windows Server 2022
+OS Version	21H2
+CIS Level	Level 1
+Patch Month	September 2026
+Image Version	2026.09.001
+Build Date	25-Sep-2026
+Source AMI	<AMI-ID>
+Security Scan	Passed
+Vulnerability Scan	Passed
+Approval Status	Approved
+Publication
+
+The approved AMI can then be:
+
+Published to approved AWS accounts.
+Shared with approved environments.
+Registered in an AMI catalog.
+Referenced through AWS Systems Manager Parameter Store.
+Consumed by Terraform.
+5.9 Layer 7 – Testing and Validation
+
+Testing must occur before the AMI is promoted for production use.
+
+I recommend four validation stages.
+
+Stage 1 – OS Validation
+
+Validate:
+
+OS version
+OS health
+Required services
+Disk configuration
+Network configuration
+Time synchronization
+Stage 2 – Security Validation
+
+Validate:
+
+CIS controls
+Firewall
+Local accounts
+Password policy
+SSH/RDP
+IMDSv2
+Encryption requirements
+Stage 3 – Agent Validation
+
+Validate:
+
+SSM Agent
+CloudWatch Agent
+Security Agent
+Vulnerability Agent
+Required services
+Stage 4 – Application Validation
+
+Validate:
+
+Required middleware
+Runtime versions
+Application prerequisites
+Required ports
+Required services
+Application startup
+5.10 Testing Gate
+
+The image should not automatically become a production AMI simply because the build completed successfully.
+
+Use a quality gate:
+
+                 Image Build
+                     |
+                     ▼
+             Automated Testing
+                     |
+        +------------+------------+
+        |            |            |
+        ▼            ▼            ▼
+      CIS       Vulnerability   Functional
+      Scan          Scan          Tests
+        |            |            |
+        +------------+------------+
+                     |
+                     ▼
+              Validation Gate
+                     |
+              +------+------+
+              |             |
+             PASS          FAIL
+              |             |
+              ▼             ▼
+        AMI Publication  Remediation
+                            |
+                            ▼
+                         Rebuild
+5.11 Layer 8 – Production Deployment
+
+Production EC2 instances should be deployed only from approved Golden AMIs.
+
+Terraform should consume the approved AMI rather than engineers manually selecting an AMI during deployment.
+
+Recommended Flow
+Approved Golden AMI
+        |
+        ▼
+SSM Parameter Store
+        |
+        ▼
+Terraform
+        |
+        ▼
+Launch Template
+        |
+        ▼
+Auto Scaling Group
+        |
+        ▼
+EC2
+
+For example:
+
+/aws/company/golden-ami/windows-2022
+
+Terraform retrieves the approved AMI reference and uses it during deployment.
+
+5.12 Environment Promotion
+
+The same Golden AMI should preferably be promoted across environments.
+
+                Golden AMI
+                    |
+                    ▼
+                  DEV
+                    |
+             Automated Tests
+                    |
+                    ▼
+                  UAT
+                    |
+          Application Validation
+                    |
+                    ▼
+               Production
+                    |
+             Change Approval
+                    |
+                    ▼
+              PROD EC2
+
+This supports the principle:
+
+Build once → Test once → Promote the same artifact
+
+Rather than creating a different image for every environment.
+
+5.13 CI/CD Integration
+
+The complete automation flow should be integrated into the organization's CI/CD platform.
+
+Developer / Platform Engineer
+             |
+             ▼
+        Git Repository
+             |
+             ▼
+        Pull Request
+             |
+             ▼
+       Code Validation
+             |
+             ▼
+      Image Build Pipeline
+             |
+             ▼
+       AWS Image Builder
+             |
+             ▼
+        Hardening
+             |
+             ▼
+         Patching
+             |
+             ▼
+     Security Validation
+             |
+             ▼
+       Testing / Scanning
+             |
+             ▼
+       Approval Gate
+             |
+             ▼
+        Golden AMI
+             |
+             ▼
+       AMI Publication
+             |
+             ▼
+          Terraform
+             |
+             ▼
+       Infrastructure
+             |
+             ▼
+        EC2 Deployment
+5.14 Continuous Compliance
+
+The lifecycle does not end when the EC2 instance is deployed.
+
+Production instances should continuously report their state.
+
+                       Production EC2
+                              |
+          +-------------------+-------------------+
+          |                   |                   |
+          ▼                   ▼                   ▼
+    Systems Manager       CloudWatch          Security Hub
+          |                   |                   |
+          ▼                   ▼                   ▼
+    Patch Compliance       Monitoring         Security Findings
+          |                   |                   |
+          +-------------------+-------------------+
+                              |
+                              ▼
+                     Compliance Review
+                              |
+                              ▼
+                       Remediation
+                              |
+                              ▼
+                     New Golden AMI
+
+This creates a feedback loop between production operations and the AMI factory.
+
+5.15 Golden AMI Lifecycle
+
+The AMI lifecycle should be version-controlled.
+
+AMI v1
+  |
+  | New security patches
+  | New CIS baseline
+  | New agent version
+  | New OS updates
+  ▼
+AMI v2
+  |
+  ▼
+Testing
+  |
+  ▼
+Approval
+  |
+  ▼
+Production
+  |
+  ▼
+AMI v3
+
+Older AMIs should be retired according to an approved retention policy.
+
+The retirement process should include:
+
+Identify AMIs no longer used.
+Confirm no production resources depend on them.
+Mark them deprecated.
+Retain the required rollback versions.
+Deregister obsolete AMIs.
+Remove associated snapshots according to retention policy.
+5.16 Roles and Responsibilities
+Component	Primary Responsibility
+Platform Engineering	Image pipeline and architecture
+DevOps	CI/CD and Terraform integration
+Security	CIS/security controls and security validation
+Infrastructure	OS and infrastructure requirements
+Application Team	Application prerequisites and validation
+Operations	Production monitoring and patch compliance
+Change Management	Production approval and change control
+5.17 Key Design Principles
+
+The future-state architecture should follow these principles:
+
+1. Immutable Infrastructure
+
+Do not manually modify production servers wherever possible.
+
+Configuration change → update image/code → redeploy.
+
+2. Automation First
+
+Manual image creation should be replaced by automated Image Builder pipelines.
+
+3. Security by Default
+
+Security controls should be incorporated during image creation rather than after deployment.
+
+4. Version Everything
+
+Version:
+
+AMIs
+Image configurations
+Hardening scripts
+SSM documents
+Terraform
+Application dependencies
+5. Build Once, Promote
+
+The same tested AMI should be promoted across environments.
+
+6. Infrastructure as Code
+
+Terraform should control infrastructure deployment and consume approved Golden AMIs.
+
+7. Continuous Compliance
+
+Production instances should continuously report patch, security, and configuration compliance.
+
+8. Fast Rollback
+
+The previous approved AMI should remain available for rollback according to the organization's retention policy.
+
+5.18 Final Future-State Flow
+
+The complete target operating model can therefore be summarized as:
+
+┌──────────────────────────────────────────────────────────┐
+│                     SOURCE CONTROL                       │
+│                                                          │
+│ Terraform | Image Config | Hardening | SSM | CI/CD      │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│                   AWS IMAGE BUILDER                      │
+│                                                          │
+│ Base OS → Hardening → Security Agents → Monitoring      │
+│             → Middleware → Patching                     │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│                    VALIDATION                             │
+│                                                          │
+│ CIS → Vulnerability → Security → Agent → Functional     │
+│                              Testing                     │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                      ┌─────┴─────┐
+                      │           │
+                    FAIL         PASS
+                      │           │
+                      ▼           ▼
+                  Remediate   Approval
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────┐
+│                  GOLDEN AMI CATALOG                      │
+│                                                          │
+│ Versioned | Tested | Hardened | Patched | Approved      │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│                    TERRAFORM / IaC                       │
+│                                                          │
+│ AMI → Launch Template → ASG → EC2                       │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│                    PRODUCTION EC2                        │
+│                                                          │
+│ SSM | CloudWatch | Security Hub | Patch Management       │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│              CONTINUOUS COMPLIANCE                       │
+│                                                          │
+│ Monitoring → Findings → Remediation → New AMI Cycle     │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            └──────────► Image Builder
